@@ -1,9 +1,8 @@
 
 class HttpResponse {
     constructor(reqs) {
-        this.status = 200
-        this.reqs = reqs
-
+        this._status = 200
+        this._reqs = reqs
         this._headers = {}
         this._respText = ""
     }
@@ -20,7 +19,7 @@ class HttpResponse {
      * @param {number} code 
      */
     status(code) {
-        this.status = code
+        this._status = code
         return this // Chainability
     }
 
@@ -33,9 +32,9 @@ class HttpResponse {
     }
 
     trigger() {
-        this.reqs.respondWith(
+        this._reqs.respondWith(
             new Response(this._respText, {
-                status: this.status,
+                status: this._status,
                 headers: this._headers
             }),
         )
@@ -43,8 +42,12 @@ class HttpResponse {
 }
 
 class HttpRequest {
-    constructor(reqs) {
-        this.reqs = reqs
+    constructor(reqs, path, vars) {
+        this._reqs = reqs
+        
+        this.path = path
+        this.headers = reqs.request.headers
+        this.params = vars
     }
 }
 
@@ -111,10 +114,35 @@ class Train {
             for await (const requestEvent of httpConn) {
                 
                 let path = requestEvent.request.url.split("/").slice(3).join("/")
-                if (path == "") path = "/"
+                path = "/" + path
+                let vars = {}
+                let forceRequest = false
 
-                if (self.paths[path] && requestEvent.request.method == self.paths[path].method) {
-                    const request = new HttpRequest(requestEvent)
+                for (const inpath of Object.keys(self.paths)) {
+                    const path1 = path.split("/")
+                    const path2 = inpath.split("/")
+                    const save = {}
+
+                    let i = 0
+                    while (i < path1.length) {
+                        if (path1[i] == path2[i]) {}
+                        else if (!path1[i] || !path2[i]) {}
+                        else {
+                            save[path2[i].replace(/:/g, "")] = path1[i]
+                        }
+                        i++
+                    }
+                    
+                    if (Object.keys(save).length == (inpath.match(/:/g) || []).length && Object.keys(save).length != 0) {
+                        vars = JSON.parse(JSON.stringify(save))
+                        forceRequest = true
+                        path = inpath
+                        break
+                    }
+                }
+
+                if ((self.paths[path] && requestEvent.request.method == self.paths[path].method) || forceRequest) {
+                    const request = new HttpRequest(requestEvent, path, vars)
                     const response = new HttpResponse(requestEvent)  
                     
                     for (const middleware of self.middleware) {

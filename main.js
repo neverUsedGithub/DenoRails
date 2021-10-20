@@ -15,6 +15,10 @@ serv.get("/", (req, res) => {
     res.send("hi 2")
 })
 
+serv.get("/test/:id/:name", (req, res) => {
+    res.send(`Shoe id: ${req.params.id} wwith name ${req.params.name}`)
+})
+
 serv.listen(3000, () => {
     console.log(`Listening on port 3000`)
 })
