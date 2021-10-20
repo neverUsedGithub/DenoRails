@@ -102,7 +102,7 @@ module.exports = class Train{
             const httpConn = Deno.serveHttp(connection);
 
             for await(const reqEvent of httpConn){
-
+                const path = reqEvent
             }
         }
     }
