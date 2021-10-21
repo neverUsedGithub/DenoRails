@@ -4,7 +4,7 @@ class HttpResponse {
         this._status = 200
         this._reqs = reqs
         this._headers = {
-            "content-type": "text/html"
+            "Content-Type": "text/html"
         }
         this._respText = ""
     }
@@ -42,7 +42,7 @@ class HttpResponse {
             const content = await Deno.readFile(path)
             const decoder = new TextDecoder('utf-8');
 
-            this.header("content-type", "")
+            this.header("Content-Type", "")
             this._respText = decoder.decode(content)
         } catch(e) {}
         return this
@@ -52,7 +52,7 @@ class HttpResponse {
         this._reqs.respondWith(
             new Response(this._respText, {
                 status: this._status,
-                header: this._headers
+                headers: this._headers
             }),
         )
     }
