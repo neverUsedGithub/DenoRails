@@ -44,8 +44,6 @@ class HttpResponse {
 
             this.header("content-type", "")
             this._respText = decoder.decode(content)
-        } catch(e) {
-            console.log(typeof e, e.message)
         }
         return this
     }
