@@ -1,11 +1,5 @@
-//const Train = require("./modules.js");
-// require is undefined - not in node lol
 
-import { Train } from "./Train.js"
-
-// make a github repo
-// ok
-
+import { Train } from "../src/Train.js"
 
 const serv = new Train({
     middleware: []
