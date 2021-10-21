@@ -3,7 +3,9 @@ class HttpResponse {
     constructor(reqs) {
         this._status = 200
         this._reqs = reqs
-        this._headers = {}
+        this._headers = {
+            "content-type": "text/html"
+        }
         this._respText = ""
     }
 
@@ -29,13 +31,30 @@ class HttpResponse {
      */
     header(name, val) {
         this._headers[name] = val
+        return this
+    }
+
+    /**
+     * @param {string} path 
+     */
+    async file(path) {
+        try {
+            const content = await Deno.readFile(path)
+            const decoder = new TextDecoder('utf-8');
+
+            this.header("content-type", "")
+            this._respText = decoder.decode(content)
+        } catch(e) {
+            console.log(typeof e, e.message)
+        }
+        return this
     }
 
     trigger() {
         this._reqs.respondWith(
             new Response(this._respText, {
                 status: this._status,
-                headers: this._headers
+                header: this._headers
             }),
         )
     }
@@ -58,13 +77,9 @@ class HttpRequest {
 }
 
 class Train {
-    /**
-     * @typedef {{middleware: string[]}} MiddlewareOptions
-     * @param {MiddlewareOptions} options
-     */
-    constructor(options) {
+    constructor() {
         this.paths = {}
-        this.middleware = options.middleware
+        this.middleware = []
     }
 
     /**
@@ -93,11 +108,9 @@ class Train {
     /**
      * @ param {function} cb
      */
-    /*
-        use(cb) {
-            this.middleware.push(cb)
-        }
-    */
+    use(cb) {
+        this.middleware.push(cb)
+    }
 
     /**
      * @param {number} port
@@ -118,28 +131,41 @@ class Train {
         async function serveHttp(conn) {
             const httpConn = Deno.serveHttp(conn);
             for await (const requestEvent of httpConn) {
-                
                 let path = requestEvent.request.url.split("/").slice(3).join("/")
                 path = "/" + path
                 let vars = {}
                 let forceRequest = false
 
                 for (const inpath of Object.keys(self.paths)) {
-                    const path1 = path.split("/")
-                    const path2 = inpath.split("/")
+                    const path1 = path.split("/").filter(x => x != "")
+                    const path2 = inpath.split("/").filter(x => x != "")
                     const save = {}
+                    let matches = 0
 
                     let i = 0
                     while (i < path1.length) {
-                        if (path1[i] == path2[i]) {}
-                        else if (!path1[i] || !path2[i]) {}
+                        if (path1[i] == path2[i]) {
+                            matches++
+                        }
                         else {
-                            save[path2[i].replace(/:/g, "")] = path1[i]
+                            if ((path2[i] || "").includes(":")) {
+                                save[path2[i].replace(/:/g, "")] = path1[i]
+                                matches++
+                            }
                         }
                         i++
                     }
-                    
-                    if (Object.keys(save).length == (inpath.match(/:/g) || []).length && Object.keys(save).length != 0) {
+
+                    // deno-lint-ignore no-inner-declarations
+                    function getDots(arr) {
+                        let c = 0
+                        for (const elem of arr) {
+                            if (elem.includes(":")) c++
+                        }
+                        return c
+                    }
+
+                    if (matches == path1.length - getDots(path1) && Object.keys(save).length == (inpath.match(/:/g) || []).length && Object.keys(save).length != 0) {
                         vars = JSON.parse(JSON.stringify(save))
                         forceRequest = true
                         path = inpath
