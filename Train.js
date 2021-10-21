@@ -46,7 +46,13 @@ class HttpRequest {
         this._reqs = reqs
         
         this.path = path
-        this.headers = reqs.request.headers
+        
+        const headerObj = {}
+        for (const pair of reqs.request.headers) {
+            headerObj[pair[0]] = pair[1]
+        }
+
+        this.headers = headerObj
         this.params = vars
     }
 }
