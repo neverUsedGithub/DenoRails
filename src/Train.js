@@ -34,20 +34,6 @@ class HttpResponse {
         return this
     }
 
-    /**
-     * @param {string} path 
-     */
-    async file(path) {
-        try {
-            const content = await Deno.readFile(path)
-            const decoder = new TextDecoder('utf-8');
-
-            this.header("Content-Type", "")
-            this._respText = decoder.decode(content)
-        } catch(e) {}
-        return this
-    }
-
     trigger() {
         this._reqs.respondWith(
             new Response(this._respText, {
