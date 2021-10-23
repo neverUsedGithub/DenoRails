@@ -1,10 +1,11 @@
+import { walkSync } from "https://deno.land/std@0.78.0/fs/mod.ts";
 
 class HttpResponse {
     constructor(reqs) {
         this._status = 200
         this._reqs = reqs
         this._headers = {
-            "Content-Type": "text/html"
+            "content-type": "text/html"
         }
         this._respText = ""
     }
@@ -15,6 +16,46 @@ class HttpResponse {
     send(text) {
         this._respText += text
         return this // Chainability
+    }
+
+    /**
+     * @param {string} path 
+     */
+    sendFile(path) {
+        const FileExtHeaders = {
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".jpeg": "image/jpeg",
+            ".tiff": "image/tiff",
+            ".csv": "text/csv",
+            ".xml": "text/xml",
+            ".md": "text/markdown",
+            ".html": "text/html",
+            ".htm": "text/html",
+            ".json": "application/json",
+            ".map": "application/json",
+            ".txt": "text/plain",
+            ".ts": "text/typescript",
+            ".tsx": "text/tsx",
+            ".js": "application/javascript",
+            ".jsx": "text/jsx",
+            ".gz": "application/gzip",
+            ".css": "text/css",
+            ".wasm": "application/wasm",
+            ".mjs": "application/javascript",
+            ".svg": "image/svg+xml",
+        }
+
+        const contents = Deno.readFileSync(path);
+
+        this._respText = contents
+        let contType = ""
+        if (FileExtHeaders[path.split(".")[1]]) {
+            contType = "." + FileExtHeaders[path.split(".")[1]]
+        }
+        this._headers["content-type"] = contType
+
+        return this
     }
 
     /**
@@ -55,6 +96,7 @@ class HttpRequest {
             headerObj[pair[0]] = pair[1]
         }
 
+        this.url = "/" + this._reqs.request.url.split("/").slice(3).join("/")
         this.headers = headerObj
         this.params = vars
     }
@@ -88,6 +130,28 @@ class Train {
         }
     }
 
+    /**
+     * @param {string} path
+     * @param {string} urlpath
+     */
+    static static(path, urlpath) {
+        return (req, res, next) => {
+            for (const entry of walkSync(path)) {
+                if (entry.path.includes(".")) {
+                    let fileNoExtension = entry.path.split(".")[0]
+                    if (urlpath) {
+                        const spl = entry.path.split("\\")
+                        fileNoExtension = `/${urlpath}/${spl[spl.length - 1]}`
+                    }
+                    
+                    if (fileNoExtension == req.url) {
+                        res.sendFile(entry.path)
+                    }
+                }
+            }
+            next()
+        }
+    }
 
     /**
      * @ param {function} cb
@@ -157,18 +221,29 @@ class Train {
                     }
                 }
 
-                if ((self.paths[path] && requestEvent.request.method == self.paths[path].method) || forceRequest) {
+                if ((self.paths[path] && requestEvent.request.method == self.paths[path].method) || forceRequest || self.middleware.length > 0) {
                     const request = new HttpRequest(requestEvent, path, vars)
                     const response = new HttpResponse(requestEvent)  
                     
-                    for (const middleware of self.middleware) {
-                        middleware(request, response)
+                    const nextF = () => {
+                        // deno-lint-ignore no-unused-vars
+                        return new Promise((res, rej) => {
+                            if (!self.paths[path]) {
+                                res()
+                                return
+                            }
+                            
+                            self.paths[path].callback(
+                                request,
+                                response
+                            )
+                            res()
+                        })
                     }
 
-                    self.paths[path].callback(
-                        request,
-                        response
-                    )
+                    for (const middleware of self.middleware) {
+                        middleware(request, response, nextF)
+                    }
 
                     response.trigger()
                 }
