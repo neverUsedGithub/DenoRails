@@ -34,7 +34,7 @@ And you successfully made your first web server with **Train**!
 
 The full code: 
 ```js
-import { Train } from "https://deno.land/x/trainjs@1.0.4/src/Train.js";
+import { Train } from "https://deno.land/x/trainjs@1.0.7/src/Train.js";
 
 const app = new Train();
 
