@@ -2,7 +2,7 @@
 
 **Train** is an express inspired web framework for **Deno**. To begin first import the latest version: 
 ```js
-import { Train } from "https://deno.land/x/trainjs@1.0.4/src/Train.js";
+import { Train } from "https://deno.land/x/trainjs@1.0.7/src/Train.js";
 ```
 To create a web server you first have to initialize a `Train` instance like so:
 ```js

@@ -1,28 +1,33 @@
 import { walkSync } from "https://deno.land/std@0.78.0/fs/mod.ts";
 
 class HttpResponse {
-    constructor(reqs) {
-        this._status = 200
-        this._reqs = reqs
-        this._headers = {
+    #status: number
+    #reqs: Deno.RequestEvent
+    #headers: { [key: string]: string }
+    #respText: string | Uint8Array
+
+    constructor(reqs: Deno.RequestEvent) {
+        this.#status = 200
+        this.#reqs = reqs
+        this.#headers = {
             "content-type": "text/html"
         }
-        this._respText = ""
+        this.#respText = ""
     }
 
     /**
      * @param {string} text
      */
-    send(text) {
-        this._respText += text
-        return this // Chainability
+    send(text: string) {
+        this.#respText += text
+        return this
     }
 
     /**
      * @param {string} path 
      */
-    sendFile(path) {
-        const FileExtHeaders = {
+    sendFile(path: string) {
+        const FileExtHeaders: { [extension: string]: string } = {
             ".png": "image/png",
             ".gif": "image/gif",
             ".jpeg": "image/jpeg",
@@ -46,14 +51,20 @@ class HttpResponse {
             ".svg": "image/svg+xml",
         }
 
-        const contents = Deno.readFileSync(path);
+        let contents
+        try {
+            contents = Deno.readFileSync(path)
+        } catch(e) {
+            console.error(`Cant open file ${path}`)
+            return this
+        }
 
-        this._respText = contents
+        this.#respText = contents
         let contType = ""
         if (FileExtHeaders[path.split(".")[1]]) {
             contType = "." + FileExtHeaders[path.split(".")[1]]
         }
-        this._headers["content-type"] = contType
+        this.#headers["content-type"] = contType
 
         return this
     }
@@ -61,8 +72,8 @@ class HttpResponse {
     /**
      * @param {number} code 
      */
-    status(code) {
-        this._status = code
+    status(code: number) {
+        this.#status = code
         return this // Chainability
     }
 
@@ -70,39 +81,48 @@ class HttpResponse {
      * @param {string} name
      * @param {string} val
      */
-    header(name, val) {
-        this._headers[name] = val
+    header(name: string, val: string) {
+        this.#headers[name] = val
         return this
     }
 
-    trigger() {
-        this._reqs.respondWith(
-            new Response(this._respText, {
-                status: this._status,
-                headers: this._headers
+    dontCallThisMethod() {
+        this.#reqs.respondWith(
+            new Response(this.#respText, {
+                status: this.#status,
+                headers: this.#headers
             }),
         )
     }
 }
 
 class HttpRequest {
-    constructor(reqs, path, vars) {
-        this._reqs = reqs
+    #reqs: Deno.RequestEvent
+    path: string
+    url: string
+    headers: {[key: string]: string}
+    params: {[key: string]: string}
+
+    constructor(reqs: Deno.RequestEvent, path: string, vars: {[key: string]: string}) {
+        this.#reqs = reqs
         
         this.path = path
         
-        const headerObj = {}
+        const headerObj: {[key: string]: string} = {}
         for (const pair of reqs.request.headers) {
             headerObj[pair[0]] = pair[1]
         }
 
-        this.url = "/" + this._reqs.request.url.split("/").slice(3).join("/")
+        this.url = "/" + this.#reqs.request.url.split("/").slice(3).join("/")
         this.headers = headerObj
         this.params = vars
     }
 }
 
 class Train {
+    paths: {[key: string]: {[key: string]: any}}
+    middleware: Function[]
+
     constructor() {
         this.paths = {}
         this.middleware = []
@@ -112,7 +132,7 @@ class Train {
      * @param {string} path
      * @param {function} cb
      */
-    get(path, cb) {
+    get(path: string, cb: (req: HttpRequest, res: HttpResponse) => void) {
         this.paths[path] = {
             method: "GET",
             callback: cb
@@ -123,7 +143,7 @@ class Train {
      * @param {stirng} path
      * @param {function} cb
      */
-    post(path, cb) {
+    post(path: string, cb: (req: HttpRequest, res: HttpResponse) => void) {
         this.paths[path] = {
             method: "POST",
             callback: cb
@@ -134,36 +154,73 @@ class Train {
      * @param {string} path
      * @param {string} urlpath
      */
-    static static(path, urlpath) {
-        return (req, res, next) => {
-            for (const entry of walkSync(path)) {
-                if (entry.path.includes(".")) {
-                    let fileNoExtension = entry.path.split(".")[0]
-                    if (urlpath) {
-                        const spl = entry.path.split("\\")
-                        fileNoExtension = `/${urlpath}/${spl[spl.length - 1]}`
-                    }
-                    
-                    if (fileNoExtension == req.url) {
+    useStatic(path: string, urlpath?: string) {
+        /*
+        for (const entry of walkSync(path)) {
+            if (entry.isFile) {
+                let fileNoExtension = entry.name
+
+                if (urlpath) {
+                    const spl = entry.path.split("\\")
+                    fileNoExtension = `/${urlpath}/${spl[spl.length - 1]}`
+                }
+                
+                this.paths[fileNoExtension] = {
+                    callback: (req: HttpRequest, res: HttpResponse) => {
                         res.sendFile(entry.path)
                     }
                 }
             }
-            next()
+        }*/
+
+        function addPaths(main: string, sub: string) {
+            return main.endsWith("/") ? main + sub : main + "/" + sub
+        }
+
+        // Recursively walk path
+        function getEntries(dir: string) {
+            let entries: string[] = []
+            for (const entry of Deno.readDirSync(dir)) {
+                if (entry.isFile) {
+                    entries.push(addPaths(dir, entry.name))
+                }
+                if (entry.isDirectory) {
+                    entries = entries.concat(getEntries(addPaths(dir, entry.name)))
+                }
+            }
+            return entries
+        }
+        
+        const entries: string[] = getEntries(path)
+
+        for (const entry of entries) {
+            let useEntry = entry
+
+            if (urlpath) {
+                let urlP = urlpath
+                if (!urlP.endsWith("/")) urlP += "/"
+                if (!urlP.startsWith("/")) urlP = "/" + urlP
+
+                useEntry = entry.replace(path, urlP)
+            }
+
+            this.get(useEntry, (req, res) => {
+                res.sendFile(entry)
+            })
         }
     }
 
     /**
      * @ param {function} cb
      */
-    use(cb) {
+    use(cb: (req: HttpRequest, res: HttpResponse, next: Function) => void) {
         this.middleware.push(cb)
     }
 
     /**
      * @param {number} port
      */
-    async listen(port, cb) {
+    async listen(port: number, cb: Function) {
         const server = Deno.listen({ port: port });
         // deno-lint-ignore no-this-alias
         const self = this
@@ -176,7 +233,7 @@ class Train {
             serveHttp(conn);
         }
         
-        async function serveHttp(conn) {
+        async function serveHttp(conn: Deno.Conn) {
             const httpConn = Deno.serveHttp(conn);
             for await (const requestEvent of httpConn) {
                 let path = requestEvent.request.url.split("/").slice(3).join("/")
@@ -187,7 +244,7 @@ class Train {
                 for (const inpath of Object.keys(self.paths)) {
                     const path1 = path.split("/").filter(x => x != "")
                     const path2 = inpath.split("/").filter(x => x != "")
-                    const save = {}
+                    const save: {[key: string]: string} = {}
                     let matches = 0
 
                     let i = 0
@@ -205,7 +262,7 @@ class Train {
                     }
 
                     // deno-lint-ignore no-inner-declarations
-                    function getDots(arr) {
+                    function getDots(arr: string[]) {
                         let c = 0
                         for (const elem of arr) {
                             if (elem.includes(":")) c++
@@ -221,31 +278,31 @@ class Train {
                     }
                 }
 
-                if ((self.paths[path] && requestEvent.request.method == self.paths[path].method) || forceRequest || self.middleware.length > 0) {
+                
+                if ((self.paths[path] && requestEvent.request.method == self.paths[path].method) || forceRequest) {
                     const request = new HttpRequest(requestEvent, path, vars)
-                    const response = new HttpResponse(requestEvent)  
+                    const response = new HttpResponse(requestEvent)
                     
                     const nextF = () => {
                         // deno-lint-ignore no-unused-vars
                         return new Promise((res, rej) => {
-                            if (!self.paths[path]) {
-                                res()
-                                return
-                            }
-                            
                             self.paths[path].callback(
                                 request,
                                 response
                             )
-                            res()
+                            res(0)
                         })
                     }
 
-                    for (const middleware of self.middleware) {
-                        middleware(request, response, nextF)
+                    if (self.middleware.length > 0) {
+                        for (const middleware of self.middleware) {
+                            middleware(request, response, nextF)
+                        }
+                    } else {
+                        await nextF()
                     }
 
-                    response.trigger()
+                    response.dontCallThisMethod()
                 }
                 else {
                     requestEvent.respondWith(
