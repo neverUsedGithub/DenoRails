@@ -2,7 +2,7 @@
 
 **Rails** is an express inspired web framework for **Deno**. To begin first import the latest version: 
 ```js
-import { Rails } from "https://deno.land/x/rails@1.0.0/src/Rails.ts";
+import { Rails } from "https://deno.land/x/rails@2.0.0/src/Rails.ts";
 ```
 To create a web server you first have to initialize a `Rails` instance like so:
 ```js
@@ -34,7 +34,7 @@ And you successfully made your first web server with **Rails**!
 
 The full code: 
 ```js
-import { Rails } from "https://deno.land/x/rails@1.0.0/src/Rails.ts";
+import { Rails } from "https://deno.land/x/rails@2.0.0/src/Rails.ts";
 
 const app = new Rails();
 
