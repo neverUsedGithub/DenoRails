@@ -1,5 +1,3 @@
-import { walkSync } from "https://deno.land/std@0.78.0/fs/mod.ts";
-
 class HttpResponse {
     #status: number
     #reqs: Deno.RequestEvent
@@ -97,11 +95,13 @@ class HttpResponse {
 }
 
 class HttpRequest {
+    headers: {[key: string]: string}
+    cookies: {[key: string]: string}
+    params: {[key: string]: string}
+    query: {[key: string]: string}
     #reqs: Deno.RequestEvent
     path: string
     url: string
-    headers: {[key: string]: string}
-    params: {[key: string]: string}
 
     constructor(reqs: Deno.RequestEvent, path: string, vars: {[key: string]: string}) {
         this.#reqs = reqs
@@ -114,12 +114,25 @@ class HttpRequest {
         }
 
         this.url = "/" + this.#reqs.request.url.split("/").slice(3).join("/")
+        
+        this.query = {}
+        const queryStr = this.url.split("?")
+        if (queryStr.length > 1) {
+            const pairs = queryStr[1].split("&").map(x => x.split("="))
+            for (const [name, val] of pairs) {
+                this.query[name] = decodeURIComponent(val)
+            }
+        }
+
+        this.cookies = {}
+        console.log(this.#reqs.request.headers)
+
         this.headers = headerObj
         this.params = vars
     }
 }
 
-class Train {
+class Rails {
     paths: {[key: string]: {[key: string]: any}}
     middleware: Function[]
 
@@ -155,24 +168,6 @@ class Train {
      * @param {string} urlpath
      */
     useStatic(path: string, urlpath?: string) {
-        /*
-        for (const entry of walkSync(path)) {
-            if (entry.isFile) {
-                let fileNoExtension = entry.name
-
-                if (urlpath) {
-                    const spl = entry.path.split("\\")
-                    fileNoExtension = `/${urlpath}/${spl[spl.length - 1]}`
-                }
-                
-                this.paths[fileNoExtension] = {
-                    callback: (req: HttpRequest, res: HttpResponse) => {
-                        res.sendFile(entry.path)
-                    }
-                }
-            }
-        }*/
-
         function addPaths(main: string, sub: string) {
             return main.endsWith("/") ? main + sub : main + "/" + sub
         }
@@ -220,8 +215,20 @@ class Train {
     /**
      * @param {number} port
      */
-    async listen(port: number, cb: Function) {
-        const server = Deno.listen({ port: port });
+    async listen(opts: any, cb: Function) {
+        const port = opts.port || 3000
+        //const certFile = opts.certFile
+        //const keyFile = opts.keyFile
+
+        const options: any = { port: port }
+
+        //if (certFile && keyFile) {
+        //    options.certFile = certFile
+        //    options.keyFile = keyFile
+        //}
+
+        const server = Deno.listen(options);
+
         // deno-lint-ignore no-this-alias
         const self = this
         
@@ -238,6 +245,8 @@ class Train {
             for await (const requestEvent of httpConn) {
                 let path = requestEvent.request.url.split("/").slice(3).join("/")
                 path = "/" + path
+                path = path.split("?")[0]
+
                 let vars = {}
                 let forceRequest = false
 
@@ -316,4 +325,4 @@ class Train {
     }
 }
 
-export { Train }
+export { Rails }
