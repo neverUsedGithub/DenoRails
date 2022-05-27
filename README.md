@@ -1,3 +1,6 @@
+# DISCONTINUED
+## This project was discontinued.
+
 # Rails
 
 **Rails** is an express inspired web framework for **Deno**. To begin first import the latest version: 
